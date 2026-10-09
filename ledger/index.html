@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Kops Stock Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one narrow column, phone-first. Money summary -> pipeline -> needs attention -> stock cards by stage. */
+:root{
+  --bg:#eef1f3; --surface:#ffffff; --ink:#15202a; --muted:#5d6b77; --line:#d7dee4;
+  --accent:#b3541e;            /* parcel-tape orange */
+  --good:#1d7a4c; --warn:#a86a00; --bad:#b42318; --info:#2a5f8f;
+  --good-bg:#e3f3ea; --warn-bg:#fbf0d9; --bad-bg:#fbe5e3; --info-bg:#e2edf7; --idle-bg:#e9edf0;
+  --f-display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --f-body:"Atkinson Hyperlegible",ui-sans-serif,system-ui,sans-serif;
+  --f-num:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f151a; --surface:#18212a; --ink:#e7edf2; --muted:#93a2ae; --line:#2a3743;
+  --accent:#e48a4f; --good:#5fd39a; --warn:#f0b54a; --bad:#ff8a7f; --info:#7fb6ea;
+  --good-bg:#16352a; --warn-bg:#3a2d12; --bad-bg:#40201d; --info-bg:#172c40; --idle-bg:#222d37; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f151a; --surface:#18212a; --ink:#e7edf2; --muted:#93a2ae; --line:#2a3743;
+  --accent:#e48a4f; --good:#5fd39a; --warn:#f0b54a; --bad:#ff8a7f; --info:#7fb6ea;
+  --good-bg:#16352a; --warn-bg:#3a2d12; --bad-bg:#40201d; --info-bg:#172c40; --idle-bg:#222d37; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body)}
+.wrap{max-width:680px;margin:0 auto;padding-inline:16px;padding-block:20px 48px;display:grid;gap:22px}
+h1,h2{font-family:var(--f-display);margin:0;text-wrap:balance}
+h1{font-size:1.75rem;font-weight:800;letter-spacing:-.01em}
+h2{font-size:1.05rem;font-weight:600;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+h2 small{font:500 .78rem var(--f-num);color:var(--muted)}
+.meta{color:var(--muted);font-size:.85rem;margin-top:2px}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.money{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.money div{background:var(--surface);padding:12px 12px 10px;min-width:0}
+.money b{display:block;font:500 clamp(1rem,4.6vw,1.35rem) var(--f-num);font-variant-numeric:tabular-nums}
+.money span{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.money .pos b{color:var(--good)}
+.pipe{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--idle-bg)}
+.pipe i{display:block;height:100%}
+.stick{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:8px;margin-top:10px;display:grid;gap:8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.search{display:flex;gap:6px;align-items:center}
+.search input{flex:1;min-width:0;font:inherit;font-size:16px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink)}
+.search input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.search button{font:inherit;font-size:.82rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:7px 12px;cursor:pointer}
+.chip{font:inherit;font-size:.82rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:5px 11px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.chip[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.chip:focus-visible,.card a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dot{width:9px;height:9px;border-radius:50%;flex:none}
+.alert{display:grid;gap:8px}
+.alert .card{border-left:4px solid var(--warn)}
+.list{display:grid;gap:10px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;gap:6px;min-width:0}
+.top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.title{font-weight:700;overflow-wrap:anywhere;min-width:0}
+.title a{color:inherit;text-decoration:none}
+.title a:hover{text-decoration:underline}
+.model{color:var(--muted);font-size:.83rem}
+.pill{font-size:.72rem;font-weight:700;border-radius:999px;padding:3px 9px;white-space:nowrap;flex:none}
+.row{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.84rem;color:var(--muted)}
+.row .num{color:var(--ink)}
+.profit.pos{color:var(--good)} .profit.neg{color:var(--bad)}
+.flag{font-size:.82rem;color:var(--warn);font-weight:700}
+.flag.bad{color:var(--bad)}
+details{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+summary{cursor:pointer;font-weight:700}
+.cx{display:grid;gap:4px;margin-top:8px;font-size:.84rem}
+.cx div{display:flex;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding-top:4px}
+.cx div span:first-child{min-width:0;overflow-wrap:anywhere}
+.more{border:0;padding:0;background:none;font-size:.84rem}.more summary{font-weight:700;color:var(--accent)}.more p{margin:.4em 0;overflow-wrap:anywhere}
+.note{font-size:.8rem;color:var(--muted)}
+.empty{color:var(--muted);font-size:.9rem}
+
+body{margin:0}
+[hidden]{display:none!important}
+.head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.refresh{font:inherit;font-size:.85rem;font-weight:700;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:7px 14px;cursor:pointer;white-space:nowrap}
+.refresh:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.refresh[disabled]{opacity:.6;cursor:progress}
+.err{background:var(--bad-bg);color:var(--bad);border:1px solid var(--bad);border-radius:10px;padding:12px 14px;font-weight:700}
+.err small{display:block;font-weight:400;color:var(--ink);margin-top:4px;overflow-wrap:anywhere}
+.loading{color:var(--muted)}
+.kv{display:grid;gap:2px;margin-top:6px;font-size:.82rem}
+.kv div{display:flex;gap:8px;justify-content:space-between;border-top:1px solid var(--line);padding-top:3px}
+.kv div span:first-child{color:var(--muted)}
+.kv div span:last-child{overflow-wrap:anywhere;text-align:right;min-width:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="head">
+    <div>
+      <h1>Stock Ledger</h1>
+      <div class="meta" id="meta">Loading…</div>
+    </div>
+    <button class="refresh" id="refresh" type="button">Refresh</button>
+  </header>
+
+  <div id="error" hidden></div>
+  <p class="loading" id="loading">Loading the latest ledger…</p>
+
+  <div id="app" hidden style="display:grid;gap:22px">
+    <section class="money" id="money" aria-label="Money summary"></section>
+
+    <section id="pipeSec">
+      <h2>Pipeline <small id="livecount"></small></h2>
+      <div class="pipe" id="pipe" role="img" aria-label="Items by stage"></div>
+      <div class="stick">
+        <div class="search" role="search"><input type="search" id="q" placeholder="Search code, model…  e.g. AW9-038" aria-label="Search items" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>
+        <div class="chips" id="chips"></div>
+      </div>
+    </section>
+
+    <section id="attnSec">
+      <h2>Needs attention <small id="attnCount"></small></h2>
+      <div class="alert" id="attn"></div>
+    </section>
+
+    <section>
+      <h2 id="listHead">All live items <small id="listCount"></small></h2>
+      <div class="list" id="list"></div>
+    </section>
+
+    <details id="cancelled"></details>
+    <details id="totals"></details>
+
+    <p class="note">Loaded fresh from <span class="num">/data/kops-ledger.json</span> each time this page opens (updated hourly by Hark). Estimates use eBay UK sold medians, minus outbound postage, before any eBay costs.</p>
+  </div>
+</div>
+
+<script>
+const DATA_URL='/data/kops-ledger.json';
+const ORDER=['Dispute','Returning','Collect from pickup point','Arrived – confirm on Vinted','Awaiting dispatch','On the way','On the way (verification)','In stock','Listed on eBay','Ended - relist later','Sold'];
+const TONE={'Dispute':'bad','Returning':'bad','Collect from pickup point':'warn','Arrived – confirm on Vinted':'warn','Awaiting dispatch':'idle','On the way':'info','On the way (verification)':'info','In stock':'good','Listed on eBay':'good','Ended - relist later':'warn','Sold':'good'};
+const LABEL={'On the way (verification)':'At verification','Collect from pickup point':'Ready to collect','Arrived – confirm on Vinted':'Arrived – confirm'};
+// Fields the card shows directly; every other non-empty field appears under "More details", so new fields show up automatically.
+const SHOWN=new Set(['sku','title','model','stage','flags','paid_total','est_resale','est_profit','listed_price','ordered','ship_deadline','carrier','vinted_item_id','description','ebay_description','price_basis','sale_price','real_profit','ebay_title']);
+const ix=s=>{const i=ORDER.indexOf(s);return i<0?99:i};
+const tone=s=>TONE[s]||'idle';
+const isNum=v=>v!==''&&v!=null&&!isNaN(Number(v));
+const gbp=v=>!isNum(v)?'–':'£'+Number(v).toLocaleString('en-GB',{maximumFractionDigits:0});
+const gbp2=v=>!isNum(v)?'–':'£'+Number(v).toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const dshort=s=>{if(!s)return '';const d=new Date(String(s).slice(0,10)+'T12:00:00Z');return isNaN(d)?esc(s):d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})};
+const nice=k=>k.replace(/_/g,' ').replace(/^./,c=>c.toUpperCase());
+const fmt=(k,v)=>{if(v===true)return 'Yes';if(v===false)return 'No';if(typeof v==='object')return esc(JSON.stringify(v));if(/price|paid|profit|fee|postage|resale|value|cost|back/i.test(k)&&isNum(v))return gbp2(v);return esc(v)};
+const norm=x=>String(x??'').toLowerCase().replace(/[\s\-_]/g,'');
+const $=id=>document.getElementById(id);
+
+let ROWS=[],SUM={},live=[],dead=[],stages=[],filter=null,query='';
+try{filter=localStorage.getItem('ledgerFilter')}catch(e){}
+
+function showError(msg,detail){
+  $('app').hidden=true;$('loading').hidden=true;
+  ROWS=[];SUM={};live=[];dead=[];
+  ['money','pipe','chips','attn','list','cancelled','totals'].forEach(id=>{$(id).innerHTML=''});
+  $('meta').textContent='Not loaded';
+  const e=$('error');e.hidden=false;
+  e.innerHTML=`<div class="err">${esc(msg)}<small>${esc(detail||'')} — nothing below is shown, so you never see old figures. Tap Refresh to try again.</small></div>`;
+}
+
+async function load(){
+  const btn=$('refresh');btn.disabled=true;btn.textContent='Loading…';
+  $('error').hidden=true;
+  if($('app').hidden)$('loading').hidden=false;
+  try{
+    const res=await fetch(DATA_URL+'?t='+Date.now(),{cache:'no-store'});
+    if(!res.ok)throw new Error('Server said HTTP '+res.status+(res.status===404?' (data file not found)':''));
+    let d;try{d=await res.json()}catch(e){throw new Error('The data file is not valid JSON')}
+    if(!d||!Array.isArray(d.items))throw new Error('The data file has no "items" list');
+    ROWS=d.items.filter(r=>r&&typeof r==='object');SUM=(d.summary&&typeof d.summary==='object')?d.summary:{};
+    $('meta').textContent='Last updated: '+(d.updated||SUM.built_at||'unknown');
+    setup();$('loading').hidden=true;$('app').hidden=false;
+  }catch(err){
+    showError("Couldn't load the ledger",(err&&err.message)||String(err));
+  }finally{btn.disabled=false;btn.textContent='Refresh'}
+}
+
+function setup(){
+  const st=r=>String(r.stage||'Unknown');
+  live=ROWS.filter(r=>!st(r).startsWith('Cancelled'));
+  dead=ROWS.filter(r=>st(r).startsWith('Cancelled'));
+  stages=[...new Set(live.map(st))].sort((a,b)=>ix(a)-ix(b)||a.localeCompare(b));
+  if(filter&&!stages.includes(filter))filter=null;
+  const tiles=[['money_tied_up','Paid, unsold'],['est_resale_value','Est. resale'],['est_profit_open','Est. profit'],['realised_profit','Realised profit']].filter(([k])=>isNum(SUM[k]));
+  $('money').style.gridTemplateColumns=`repeat(${Math.min(tiles.length||1,4)},minmax(0,1fr))`;
+  $('money').innerHTML=tiles.map(([k,l])=>`<div class="${/profit/.test(k)&&Number(SUM[k])>=0?'pos':''}"><b>${gbp(SUM[k])}</b><span>${l}</span></div>`).join('')||'<div><span>No totals in file</span></div>';
+  $('livecount').textContent=live.length+' items';
+  const tot=Object.entries(SUM).filter(([k,v])=>v!==null&&typeof v!=='object');
+  $('totals').hidden=!tot.length;
+  $('totals').innerHTML=`<summary>All totals from the file</summary><div class="kv">`+tot.map(([k,v])=>`<div><span>${esc(nice(k))}</span><span class="num">${fmt(k,v)}</span></div>`).join('')+
+    (SUM.by_stage&&typeof SUM.by_stage==='object'?Object.entries(SUM.by_stage).map(([k,v])=>`<div><span>Stage: ${esc(k)}</span><span class="num">${esc(v)}</span></div>`).join(''):'')+'</div>';
+  const refunded=isNum(SUM.cancelled_paid_back)?SUM.cancelled_paid_back:dead.reduce((a,r)=>a+Number(r.paid_total||0),0);
+  $('cancelled').innerHTML=`<summary>${dead.length} cancelled or never sent · <span class="num">${gbp2(refunded)}</span> refunded</summary><div class="cx">`+
+    dead.slice().sort((a,b)=>String(b.ordered||'').localeCompare(String(a.ordered||''))).map(r=>`<div><span>${esc(r.title)} <span class="model">· ${esc(r.vinted_status||r.stage)}</span></span><span class="num">${gbp2(r.paid_total)}</span></div>`).join('')+'</div>';
+  render();
+}
+
+function pill(s){const t=tone(s);return `<span class="pill" style="background:var(--${t}-bg);color:var(--${t==='idle'?'muted':t})">${esc(LABEL[s]||s)}</span>`}
+function card(r){
+  const s=String(r.stage||'Unknown');
+  const p=isNum(r.est_profit)?`<span>Est. profit <span class="num profit ${Number(r.est_profit)>=0?'pos':'neg'}">${gbp(r.est_profit)}</span></span>`:'';
+  const link=r.vinted_item_id?`<a href="https://www.vinted.co.uk/items/${encodeURIComponent(r.vinted_item_id)}" target="_blank" rel="noopener">${esc(r.title)}</a>`:esc(r.title);
+  const ship=s==='Awaiting dispatch'&&r.ship_deadline?`<span>Ship by <span class="num">${dshort(r.ship_deadline)}</span></span>`:'';
+  const carrier=r.carrier?`<span>${esc(r.carrier)}</span>`:'';
+  const sold=isNum(r.sale_price)?`<span>Sold <span class="num">${gbp2(r.sale_price)}</span></span>`:'';
+  const real=isNum(r.real_profit)?`<span>Profit <span class="num profit ${Number(r.real_profit)>=0?'pos':'neg'}">${gbp2(r.real_profit)}</span></span>`:'';
+  const flags=String(r.flags||'').split('; ').filter(Boolean).map(f=>`<div class="flag ${/OVERDUE|complaint/.test(f)?'bad':''}">⚑ ${esc(f)}</div>`).join('');
+  const basis=r.price_basis&&String(r.price_basis).includes('price book')?' · old price book':'';
+  const texts=(r.description||r.ebay_description||r.ebay_title)?`<details class="more"><summary>Listing text</summary><p><b>Bought (Vinted):</b> ${r.description?esc(r.description):'not on file'}</p>${r.ebay_title?`<p><b>eBay title:</b> ${esc(r.ebay_title)}</p>`:''}${r.ebay_description?`<p><b>Selling (eBay):</b> ${esc(r.ebay_description)}</p>`:''}</details>`:'';
+  const extra=Object.entries(r).filter(([k,v])=>!SHOWN.has(k)&&v!==''&&v!=null&&!(Array.isArray(v)&&!v.length));
+  const more=extra.length?`<details class="more"><summary>More details</summary><div class="kv">${extra.map(([k,v])=>`<div><span>${esc(nice(k))}</span><span>${fmt(k,v)}</span></div>`).join('')}</div></details>`:'';
+  return `<article class="card"><div class="top"><div class="title">${r.sku?`<span class="num" style="font-size:.78rem;border:1px solid var(--line);border-radius:4px;padding:1px 5px;margin-right:6px">${esc(r.sku)}</span>`:''}${link}<div class="model">${esc(r.model||'Model not recognised')}${basis}</div></div>${pill(s)}</div>
+  <div class="row"><span>Paid <span class="num">${gbp2(r.paid_total)}</span></span><span>Est. resale <span class="num">${gbp(r.est_resale)}</span></span>${p}${isNum(r.listed_price)?`<span>Listed at <span class="num">${gbp(r.listed_price)}</span></span>`:''}${sold}${real}</div>
+  <div class="row">${r.ordered?`<span>Ordered <span class="num">${dshort(r.ordered)}</span></span>`:''}${ship}${carrier}</div>${flags}${texts}${more}</article>`;
+}
+const hay=r=>norm(Object.values(r).filter(v=>typeof v!=='object').join(' '));
+function render(){
+  const total=live.length||1;
+  $('pipe').innerHTML=stages.map(s=>{const n=live.filter(r=>(r.stage||'Unknown')===s).length,t=tone(s);return `<i title="${esc(s)}: ${n}" style="width:${n/total*100}%;background:var(--${t==='idle'?'muted':t})"></i>`}).join('');
+  $('chips').innerHTML=[`<button class="chip" aria-pressed="${!filter}" data-s="">All <span class="num">${live.length}</span></button>`]
+    .concat(stages.map(s=>{const t=tone(s);return `<button class="chip" aria-pressed="${filter===s}" data-s="${esc(s)}"><span class="dot" style="background:var(--${t==='idle'?'muted':t})"></span>${esc(LABEL[s]||s)} <span class="num">${live.filter(r=>(r.stage||'Unknown')===s).length}</span></button>`})).join('');
+  const attn=live.filter(r=>r.flags||TONE[r.stage]==='warn'||TONE[r.stage]==='bad');
+  $('attnCount').textContent=attn.length;
+  $('attn').innerHTML=attn.length?attn.map(card).join(''):'<p class="empty">Nothing needs action right now.</p>';
+  const q=norm(query);
+  $('attnSec').hidden=!!filter||!!q;
+  const shown=live.filter(r=>q?hay(r).includes(q):(!filter||(r.stage||'Unknown')===filter)).sort((a,b)=>stages.indexOf(a.stage||'Unknown')-stages.indexOf(b.stage||'Unknown')||String(b.ordered||'').localeCompare(String(a.ordered||'')));
+  $('listHead').firstChild.textContent=(q?`Search “${query.trim()}” · ${shown.length} found`:(filter?(LABEL[filter]||filter):'All live items'))+' ';
+  $('listCount').textContent=gbp(shown.reduce((a,r)=>a+(isNum(r.paid_total)?Number(r.paid_total):0),0))+' paid';
+  $('list').innerHTML=shown.length?shown.map(card).join(''):'<p class="empty">No live items match. Try the code without the dash, or part of the model name.</p>';
+}
+const qEl=$('q');
+qEl.addEventListener('input',()=>{query=qEl.value;render()});
+qEl.addEventListener('keydown',e=>{if(e.key==='Enter'){qEl.blur();$('listHead').scrollIntoView({behavior:'smooth',block:'start'})}if(e.key==='Escape'){qEl.value='';query='';render()}});
+$('chips').addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;filter=b.dataset.s||null;query='';qEl.value='';try{filter?localStorage.setItem('ledgerFilter',filter):localStorage.removeItem('ledgerFilter')}catch(e){}render();
+  $(filter?'listHead':'pipeSec').scrollIntoView({behavior:'smooth',block:'start'})});
+$('refresh').addEventListener('click',load);
+load();
+</script>
+</body>
+</html>
